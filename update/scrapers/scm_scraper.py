@@ -60,6 +60,8 @@ def init_logger(date, scraper_name, uuid):
 
     # Create formatter
     formatter = logging.Formatter('%(asctime)s - %(relativeCreated)d - %(name)s - %(levelname)s - %(message)s')
+    # Log in UTC
+    formatter.converter = time.gmtime
 
     # Add formatters to handlers
     stream_handler.setFormatter(formatter)
@@ -134,7 +136,6 @@ def scm_scraper(base_url=SCM_BASE_URL, api=SCM_API, scraper_name="scm_scraper", 
         # Collect cable data in one dictionary.
         cables = {}
 
-        # # Send the requests.
         if write_log:
             logger.info(msg="Requesting list of cable urls".format(request_start_time:=time.perf_counter()))
 
@@ -142,26 +143,27 @@ def scm_scraper(base_url=SCM_BASE_URL, api=SCM_API, scraper_name="scm_scraper", 
             response = await client.get(url, headers=headers)
             return response.json()
 
-        async def main(urls):
+        async def send_requests(urls):
             async with httpx.AsyncClient() as client:
                 async with aiometer.amap(
                     functools.partial(fetch,client),
                     urls,
-                    # the below settings got me the fastest time's I've had!
+                    # The below settings got me the fastest time's I've had!
                     # max_at_once=500, max_per_second=250
                     # 0:00:03.478834
                     # 0:00:03.512974
                     # 0:00:03.648152
                     # 0:00:03.891524
-                    max_at_once=500,
-                    max_per_second=250
+                    # I've halved the above settings bc server rate limiting.
+                    max_at_once=250,
+                    max_per_second=125
                 ) as responses:
                     async for r in responses:
                         #########################
                         #### STORE RESPONSES ####
                         #########################
                         try:
-                            cable_request_time = format((time.perf_counter() - request_start_time), '.3f')
+                            cable_request_time = format((time.perf_counter() - request_start_time), ".3f")
                             cable_name = r.pop("name")
                             cables[cable_name] = r
 
@@ -175,16 +177,16 @@ def scm_scraper(base_url=SCM_BASE_URL, api=SCM_API, scraper_name="scm_scraper", 
                                 logger.error(e, exc_info=True)
                             continue
 
-        asyncio.run(main(json_urls))
+        # Send the requests.
+        asyncio.run(send_requests(json_urls))
+        cable_total_time = format((time.perf_counter() - request_start_time), ".3f")
 
         ###########################
         #### FINISH AND RETURN ####
         ###########################
         # Finish writing the log, return the data.
         if write_log:
-            logger.info(msg="Received responses to requests for each cable's data."
-                        .format(cable_total_time:=datetime.timedelta(seconds=(time.perf_counter() - request_start_time)))
-            )
+            logger.info(msg="Received responses to requests for each cable's data.")
             logger.info(msg=f"SCM_SCRAPER_V{SCRAPER_VERSION} INSTANCE {uuid} completed."
                         + " " +
                         f"Function execution time: {datetime.timedelta(seconds=(time.perf_counter() - func_start_time))}."
@@ -204,8 +206,8 @@ def scm_scraper(base_url=SCM_BASE_URL, api=SCM_API, scraper_name="scm_scraper", 
 
 
 def main():
-    # Datetime of run, formatted like '2025-04-27T14:31:11.854'
-    start_datetime = datetime.datetime.now().isoformat(timespec='milliseconds')
+    # Datetime of run in UTC, formatted like '2025-04-27T14:31:11.854'
+    start_datetime = datetime.datetime.utcnow().isoformat(timespec="milliseconds")
     # For tracking scraper function performance.
     outside_scraper_start_time = time.perf_counter()
 
