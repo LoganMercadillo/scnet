@@ -26,7 +26,6 @@ import logging
 import time
 import datetime
 import sys
-import os
 from pathlib import Path
 from uuid import uuid4
 from json import dump
@@ -82,7 +81,12 @@ def make_json_url(cable):
     return json_url
 
 
-def scm_scraper(base_url=SCM_BASE_URL, api=SCM_API, scraper_name="scm_scraper", start_datetime=None, write_log=False,):
+def scm_scraper(
+    base_url=SCM_BASE_URL,
+    api=SCM_API,
+    scraper_name="scm_scraper",
+    start_datetime=datetime.datetime.utcnow().isoformat(timespec="milliseconds"),
+    write_log=False,):
     """Scrapes data for all cables on submarinecablemap.com.
 
     Returns a dict of cable names mapped to its data.
@@ -92,7 +96,8 @@ def scm_scraper(base_url=SCM_BASE_URL, api=SCM_API, scraper_name="scm_scraper", 
         ###############
         #### SETUP ####
         ###############
-        # Uniq ID for this run of the scraper. Currently only using the first 8 characters.
+        # Uniq ID for this run of the scraper. 
+        # Currently only using the first 8 characters.
         uuid = str(uuid4().hex)[:8]
 
         # Set up the logger.
@@ -212,7 +217,8 @@ def main():
     outside_scraper_start_time = time.perf_counter()
 
     # Scrape the data
-    scm_data, file_name = scm_scraper(start_datetime=start_datetime, write_log=True)
+    # scraper_date_uuid is used for creating the output file name AND the logger file name.
+    scm_data, scraper_date_uuid = scm_scraper(start_datetime=start_datetime, write_log=True)
 
     # Record how long the scraper took to run
     outside_scraper_end_time = time.perf_counter()
@@ -220,14 +226,16 @@ def main():
     print(f"Outside scraper performance: {outside_scraper_elapsed_time}")
 
     # Build the path and name of the output file.
-    data_path = Path("./update/data/scm_data_" + file_name + ".json")
-    data_path.parent.mkdir(parents=True, exist_ok=True)
+    # Log file name has the format "scm_scraper_" + date + "_" + uuid + ".log"
+    # SCM data file has the format "scm_data_" + date + "_" + uuid + ".json"
+    scm_data_path = Path("./update/data/scm_data_" + scraper_date_uuid + ".json")
+    scm_data_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Create the output file and write the scraper output.
-    with open(data_path, "wt", encoding="utf-8") as f:
+    with open(scm_data_path, "wt", encoding="utf-8") as f:
         try:
             dump(scm_data, f, ensure_ascii=False, sort_keys=True, indent=4)
-            print(f"Wrote scm cable data to {data_path}.")
+            print(f"Wrote scm cable data to {scm_data_path}.")
         except (TypeError, Exception) as exc:
             print(exc)
             print("Could not write scm cable data.")
